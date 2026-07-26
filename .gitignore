@@ -1,0 +1,23 @@
+# Python and tooling
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# Local configuration
+.env
+.DS_Store
+
+# Data, checkpoints, and experiment outputs
+data/
+artifacts/
+checkpoints/
+runs/
+wandb/
+*.pt
+*.pth
+*.ckpt
