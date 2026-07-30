@@ -15,4 +15,5 @@ M. Bojarski et al., [End to End Learning for Self-Driving Cars](https://arxiv.or
 
 ## Status
 
-Implementation has not started.
+The initial model, CSV driving-log workflow, and validation entry point are implemented.
+Use `notebooks/pilotnet_walkthrough.ipynb` for the architecture and training walkthrough.
