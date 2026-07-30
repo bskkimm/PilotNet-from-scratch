@@ -3,5 +3,5 @@
 import pilotnet
 
 
-def test_package_imports() -> None:
-    assert pilotnet.__doc__
+def test_package_exports_model() -> None:
+    assert pilotnet.PilotNet
