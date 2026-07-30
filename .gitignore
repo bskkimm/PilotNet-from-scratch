@@ -13,11 +13,11 @@ __pycache__/
 .DS_Store
 
 # Data, checkpoints, and experiment outputs
-data/
-artifacts/
-checkpoints/
-runs/
-wandb/
+/data/
+/artifacts/
+/checkpoints/
+/runs/
+/wandb/
 *.pt
 *.pth
 *.ckpt
