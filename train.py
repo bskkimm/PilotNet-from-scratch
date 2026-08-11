@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from importlib.metadata import version
 from pathlib import Path
 
 import torch
@@ -54,6 +55,15 @@ def main() -> None:
         side_camera_correction=args.side_camera_correction,
     )
     val_dataset = DrivingDataset(args.val_csv, preprocess=preprocessing)
+    resolved_train_csv = str(train_dataset.csv_path.resolve())
+    resolved_val_csv = str(val_dataset.csv_path.resolve())
+    resolved_configuration = {
+        **vars(args),
+        "artifact_dir": str(artifact_dir.resolve()),
+        "device": str(device),
+        "train_csv": resolved_train_csv,
+        "val_csv": resolved_val_csv,
+    }
     loader_options = {
         "batch_size": args.batch_size,
         "num_workers": args.workers,
@@ -76,6 +86,22 @@ def main() -> None:
             "lr": args.lr,
             "weight_decay": args.weight_decay,
             "side_camera_correction": args.side_camera_correction,
+        },
+        configuration=resolved_configuration,
+        datasets={
+            "train_csv": resolved_train_csv,
+            "val_csv": resolved_val_csv,
+            "train_size": len(train_dataset),
+            "val_size": len(val_dataset),
+        },
+        environment={
+            "device": str(device),
+            "packages": {
+                "numpy": version("numpy"),
+                "pillow": version("Pillow"),
+                "torch": version("torch"),
+                "torchvision": version("torchvision"),
+            },
         },
     )
     (artifact_dir / "run_manifest.json").write_text(

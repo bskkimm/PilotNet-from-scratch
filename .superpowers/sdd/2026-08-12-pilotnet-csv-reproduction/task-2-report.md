@@ -43,3 +43,25 @@ PYTHONPATH=src python3 -m pytest tests/test_sampling.py tests/test_reproducibili
 - No diagnostics or notebook changes were made.
 - The commit contains only Task 2 implementation, tests, dependency metadata,
   and this report.
+
+## Review Fix: Complete Run Bindings
+
+- Added a `configuration` manifest section containing every resolved training CLI
+  value, including absolute train/validation CSV paths, artifact directory, and
+  resolved device.
+- Added `datasets` metadata with the absolute CSV paths and train/validation
+  dataset sizes after dataset construction and before model optimization.
+- Added `environment` metadata with the resolved device and installed NumPy,
+  Pillow, Torch, and Torchvision package versions.
+- The same manifest continues to be written before epoch one and embedded in
+  `best.pt`; train-only balancing and evaluation metadata rejection are unchanged.
+
+### Review-Fix Verification
+
+```text
+PYTHONPATH=src python3 -m pytest tests/test_sampling.py tests/test_reproducibility.py tests/test_train_cli.py -v
+7 passed in 4.00s
+```
+
+- The CLI integration test now asserts all configuration, dataset, device, and
+  package-version bindings in both the manifest and checkpoint metadata.

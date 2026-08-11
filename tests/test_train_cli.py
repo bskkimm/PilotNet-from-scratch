@@ -35,6 +35,8 @@ def test_training_writes_preprocessing_to_manifest_and_checkpoint(tmp_path) -> N
             "1",
             "--workers",
             "0",
+            "--device",
+            "cpu",
             "--crop-top-fraction",
             "0.1",
             "--balance-bins",
@@ -49,6 +51,34 @@ def test_training_writes_preprocessing_to_manifest_and_checkpoint(tmp_path) -> N
 
     assert manifest["preprocessing"]["crop_top_fraction"] == 0.1
     assert manifest["sampling"]["balance_bins"] == 5
+    assert manifest["configuration"] == {
+        "artifact_dir": str(output_dir.resolve()),
+        "batch_size": 64,
+        "crop_bottom_fraction": 0.0,
+        "crop_top_fraction": 0.1,
+        "deterministic": False,
+        "device": "cpu",
+        "epochs": 1,
+        "lr": 1e-4,
+        "seed": 42,
+        "side_camera_correction": None,
+        "balance_bins": 5,
+        "train_csv": str((tmp_path / "train.csv").resolve()),
+        "val_csv": str((tmp_path / "val.csv").resolve()),
+        "weight_decay": 0.0,
+        "workers": 0,
+    }
+    assert manifest["datasets"] == {
+        "train_csv": str((tmp_path / "train.csv").resolve()),
+        "val_csv": str((tmp_path / "val.csv").resolve()),
+        "train_size": 1,
+        "val_size": 1,
+    }
+    assert manifest["environment"]["device"] == "cpu"
+    assert {"numpy", "pillow", "torch", "torchvision"} <= manifest["environment"][
+        "packages"
+    ].keys()
+    assert all(isinstance(version, str) for version in manifest["environment"]["packages"].values())
     assert checkpoint["run_manifest"] == manifest
 
 
