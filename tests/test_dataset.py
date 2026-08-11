@@ -30,3 +30,29 @@ def test_horizontal_flip_negates_the_steering_target(tmp_path, monkeypatch) -> N
     _, steering = DrivingDataset(tmp_path / "log.csv", augment=True)[0]
 
     assert steering.item() == pytest.approx(-0.25)
+
+
+def test_dataset_expands_available_side_cameras(tmp_path) -> None:
+    for name in ("center.jpg", "left.jpg", "right.jpg"):
+        Image.new("RGB", (200, 66)).save(tmp_path / name)
+    (tmp_path / "log.csv").write_text(
+        "image_path,steering,left_image_path,right_image_path\n"
+        "center.jpg,0.1,left.jpg,right.jpg\n",
+        encoding="utf-8",
+    )
+
+    dataset = DrivingDataset(tmp_path / "log.csv", side_camera_correction=0.2)
+
+    assert dataset.targets == [0.1, 0.3, -0.1]
+
+
+def test_dataset_requires_correction_for_available_side_camera(tmp_path) -> None:
+    Image.new("RGB", (200, 66)).save(tmp_path / "center.jpg")
+    Image.new("RGB", (200, 66)).save(tmp_path / "left.jpg")
+    (tmp_path / "log.csv").write_text(
+        "image_path,steering,left_image_path\ncenter.jpg,0.1,left.jpg\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="side_camera_correction"):
+        DrivingDataset(tmp_path / "log.csv")

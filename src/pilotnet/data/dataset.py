@@ -8,26 +8,55 @@ from pathlib import Path
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
-from torchvision.transforms import InterpolationMode
 from torchvision.transforms import functional as transforms
+
+from .preprocessing import PreprocessConfig, preprocess_image
 
 
 class DrivingDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
     """Load a CSV with ``image_path`` and ``steering`` columns.
 
-    Image paths are resolved relative to the CSV file. Images are resized to
-    PilotNet's ``200 x 66`` input. Training augmentation mirrors an image and
-    negates its steering target, preserving the driving geometry.
+    Image paths are resolved relative to the CSV file. Available left and
+    right recovery-camera paths expand each row when a correction is supplied.
+    Training augmentation mirrors an image and negates its steering target.
     """
 
-    def __init__(self, csv_path: str | Path, augment: bool = False) -> None:
+    def __init__(
+        self,
+        csv_path: str | Path,
+        *,
+        augment: bool = False,
+        preprocess: PreprocessConfig = PreprocessConfig(),
+        side_camera_correction: float | None = None,
+    ) -> None:
         self.csv_path = Path(csv_path)
         self.augment = augment
+        self.preprocess = preprocess
         with self.csv_path.open(newline="", encoding="utf-8") as file:
-            rows = list(csv.DictReader(file))
-        if not rows or {"image_path", "steering"} - set(rows[0]):
+            reader = csv.DictReader(file)
+            rows = list(reader)
+        if not rows or {"image_path", "steering"} - set(reader.fieldnames or []):
             raise ValueError("CSV must contain at least one row with image_path and steering columns.")
-        self.samples = [(self.csv_path.parent / row["image_path"], float(row["steering"])) for row in rows]
+
+        self.samples: list[tuple[Path, float]] = []
+        for row in rows:
+            steering = float(row["steering"])
+            self.samples.append((self.csv_path.parent / row["image_path"], steering))
+            for column, correction in (
+                ("left_image_path", side_camera_correction),
+                ("right_image_path", -side_camera_correction if side_camera_correction is not None else None),
+            ):
+                image_path = row.get(column, "")
+                if not image_path:
+                    continue
+                if correction is None:
+                    raise ValueError("side_camera_correction is required for available side cameras.")
+                self.samples.append((self.csv_path.parent / image_path, round(steering + correction, 10)))
+
+        for image_path, _ in self.samples:
+            if not image_path.is_file():
+                raise FileNotFoundError(image_path)
+        self.targets = [steering for _, steering in self.samples]
 
     def __len__(self) -> int:
         return len(self.samples)
@@ -36,13 +65,7 @@ class DrivingDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
         image_path, steering = self.samples[index]
         with Image.open(image_path) as image_file:
             image = image_file.convert("RGB")
-        image = transforms.resize(
-            image,
-            size=(66, 200),
-            interpolation=InterpolationMode.BILINEAR,
-            antialias=True,
-        )
         if self.augment and torch.rand(()) < 0.5:
             image = transforms.hflip(image)
             steering = -steering
-        return transforms.to_tensor(image), torch.tensor(steering, dtype=torch.float32)
+        return preprocess_image(image, self.preprocess), torch.tensor(steering, dtype=torch.float32)
