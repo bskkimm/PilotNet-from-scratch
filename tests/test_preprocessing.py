@@ -41,3 +41,11 @@ def test_preprocess_outputs_ycbcr_channels_in_yuv_order() -> None:
 def test_preprocess_rejects_invalid_crop_fractions(kwargs) -> None:
     with pytest.raises(ValueError):
         PreprocessConfig(**kwargs)
+
+
+@pytest.mark.parametrize(
+    "kwargs", [{"height": 0}, {"height": -1}, {"width": 0}, {"width": -1}]
+)
+def test_preprocess_rejects_nonpositive_output_dimensions(kwargs) -> None:
+    with pytest.raises(ValueError):
+        PreprocessConfig(**kwargs)

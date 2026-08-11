@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import math
 from pathlib import Path
 
 import torch
@@ -39,23 +40,40 @@ class DrivingDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
             raise ValueError("CSV must contain at least one row with image_path and steering columns.")
 
         self.samples: list[tuple[Path, float]] = []
-        for row in rows:
-            steering = float(row["steering"])
+        for row_number, row in enumerate(rows, start=2):
+            try:
+                steering = float(row["steering"])
+            except (TypeError, ValueError) as error:
+                raise ValueError(f"Invalid steering value in row {row_number}.") from error
+            if not math.isfinite(steering):
+                raise ValueError(f"Invalid steering value in row {row_number}.")
             self.samples.append((self.csv_path.parent / row["image_path"], steering))
-            for column, correction in (
-                ("left_image_path", side_camera_correction),
-                ("right_image_path", -side_camera_correction if side_camera_correction is not None else None),
-            ):
+            for column, direction in (("left_image_path", 1), ("right_image_path", -1)):
                 image_path = row.get(column, "").strip()
                 if not image_path:
                     continue
-                if correction is None:
-                    raise ValueError("side_camera_correction is required for available side cameras.")
-                self.samples.append((self.csv_path.parent / image_path, round(steering + correction, 10)))
+                if (
+                    side_camera_correction is None
+                    or not math.isfinite(side_camera_correction)
+                    or side_camera_correction < 0
+                ):
+                    raise ValueError(
+                        "side_camera_correction must be a finite nonnegative value for available side cameras."
+                    )
+                self.samples.append(
+                    (
+                        self.csv_path.parent / image_path,
+                        round(steering + direction * side_camera_correction, 10),
+                    )
+                )
 
         for image_path, _ in self.samples:
             if not image_path.is_file():
                 raise FileNotFoundError(image_path)
+            with Image.open(image_path) as image_file:
+                image_file.verify()
+            with Image.open(image_path) as image_file:
+                image_file.load()
         self.targets = [steering for _, steering in self.samples]
 
     def __len__(self) -> int:

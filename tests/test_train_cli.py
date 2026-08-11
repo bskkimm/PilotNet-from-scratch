@@ -76,6 +76,7 @@ def test_training_writes_preprocessing_to_manifest_and_checkpoint(tmp_path) -> N
         "val_size": 1,
     }
     assert manifest["environment"]["device"] == "cpu"
+    assert manifest["environment"]["python"] == sys.version
     assert manifest["environment"]["packages"] == {
         "numpy": version("numpy"),
         "pillow": version("Pillow"),
@@ -83,6 +84,60 @@ def test_training_writes_preprocessing_to_manifest_and_checkpoint(tmp_path) -> N
         "torchvision": version("torchvision"),
     }
     assert checkpoint["run_manifest"] == manifest
+
+
+def test_training_expands_validation_side_cameras_without_a_sampler(tmp_path, monkeypatch) -> None:
+    import train
+
+    for name in ("center.jpg", "left.jpg", "right.jpg"):
+        Image.new("RGB", (200, 66)).save(tmp_path / name)
+    for name in ("train.csv", "val.csv"):
+        (tmp_path / name).write_text(
+            "image_path,steering,left_image_path,right_image_path\n"
+            "center.jpg,0.1,left.jpg,right.jpg\n",
+            encoding="utf-8",
+        )
+
+    args = type(
+        "Args",
+        (),
+        {
+            "train_csv": str(tmp_path / "train.csv"),
+            "val_csv": str(tmp_path / "val.csv"),
+            "artifact_dir": str(tmp_path / "run"),
+            "epochs": 0,
+            "batch_size": 1,
+            "workers": 0,
+            "lr": 1e-4,
+            "weight_decay": 0.0,
+            "seed": 42,
+            "deterministic": False,
+            "crop_top_fraction": 0.0,
+            "crop_bottom_fraction": 0.0,
+            "side_camera_correction": 0.2,
+            "balance_bins": 5,
+            "device": "cpu",
+        },
+    )()
+    loaders = []
+
+    class RecordingDataLoader:
+        def __init__(self, dataset, **kwargs) -> None:
+            loaders.append((dataset, kwargs))
+
+    monkeypatch.setattr(train, "parse_args", lambda: args)
+    monkeypatch.setattr(train, "DataLoader", RecordingDataLoader)
+
+    train.main()
+
+    validation_dataset, validation_options = loaders[1]
+    assert len(validation_dataset) == 3
+    assert validation_options == {
+        "batch_size": 1,
+        "num_workers": 0,
+        "pin_memory": False,
+        "shuffle": False,
+    }
 
 
 def test_evaluation_rejects_checkpoint_without_preprocessing_metadata(tmp_path) -> None:

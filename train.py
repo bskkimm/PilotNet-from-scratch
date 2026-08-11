@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from importlib.metadata import version
 from pathlib import Path
 
@@ -54,7 +55,11 @@ def main() -> None:
         preprocess=preprocessing,
         side_camera_correction=args.side_camera_correction,
     )
-    val_dataset = DrivingDataset(args.val_csv, preprocess=preprocessing)
+    val_dataset = DrivingDataset(
+        args.val_csv,
+        preprocess=preprocessing,
+        side_camera_correction=args.side_camera_correction,
+    )
     resolved_train_csv = str(train_dataset.csv_path.resolve())
     resolved_val_csv = str(val_dataset.csv_path.resolve())
     resolved_configuration = {
@@ -96,6 +101,7 @@ def main() -> None:
         },
         environment={
             "device": str(device),
+            "python": sys.version,
             "packages": {
                 "numpy": version("numpy"),
                 "pillow": version("Pillow"),

@@ -10,8 +10,9 @@ class PilotNet(nn.Module):
     """Map a cropped front-camera image to one steering-angle prediction.
 
     The network uses the five convolutional and four fully connected layers
-    reported in the PilotNet paper. Inputs must be RGB tensors in ``[0, 1]``
-    with shape ``(batch, 3, 66, 200)``; normalization is part of the model.
+    reported in the PilotNet paper. Inputs must be YUV/YCbCr tensors in
+    ``[0, 1]`` with shape ``(batch, 3, 66, 200)``; normalization is part of
+    the model.
     """
 
     image_size = (66, 200)

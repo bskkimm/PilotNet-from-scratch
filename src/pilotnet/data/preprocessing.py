@@ -22,6 +22,8 @@ class PreprocessConfig:
             raise ValueError("Crop fractions must be in [0, 1).")
         if self.crop_top_fraction + self.crop_bottom_fraction >= 1:
             raise ValueError("Crop fractions must leave at least one image row.")
+        if self.height <= 0 or self.width <= 0:
+            raise ValueError("Preprocess height and width must be positive.")
 
 
 def preprocess_image(image: Image.Image, config: PreprocessConfig) -> torch.Tensor:
