@@ -8,7 +8,7 @@ import json
 import torch
 from torch.utils.data import DataLoader
 
-from pilotnet.data import DrivingDataset
+from pilotnet.data import DrivingDataset, PreprocessConfig
 from pilotnet.engine import evaluate
 from pilotnet.models import PilotNet
 
@@ -25,7 +25,16 @@ def main() -> None:
     model = PilotNet().to(device)
     checkpoint = torch.load(args.checkpoint, map_location=device, weights_only=False)
     model.load_state_dict(checkpoint["model_state_dict"])
-    loader = DataLoader(DrivingDataset(args.csv), batch_size=args.batch_size, num_workers=args.workers)
+    try:
+        preprocessing = PreprocessConfig(**checkpoint["run_manifest"]["preprocessing"])
+    except KeyError as error:
+        raise ValueError("Checkpoint does not contain preprocessing metadata.") from error
+    loader = DataLoader(
+        DrivingDataset(args.csv, preprocess=preprocessing),
+        batch_size=args.batch_size,
+        num_workers=args.workers,
+        shuffle=False,
+    )
     print(json.dumps(evaluate(model, loader, device), indent=2))
 
 
