@@ -46,7 +46,7 @@ class DrivingDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
                 ("left_image_path", side_camera_correction),
                 ("right_image_path", -side_camera_correction if side_camera_correction is not None else None),
             ):
-                image_path = row.get(column, "")
+                image_path = row.get(column, "").strip()
                 if not image_path:
                     continue
                 if correction is None:

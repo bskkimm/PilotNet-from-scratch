@@ -56,3 +56,17 @@ def test_dataset_requires_correction_for_available_side_camera(tmp_path) -> None
 
     with pytest.raises(ValueError, match="side_camera_correction"):
         DrivingDataset(tmp_path / "log.csv")
+
+
+@pytest.mark.parametrize("left_path,right_path", [("", ""), ("   ", "\t")])
+def test_dataset_ignores_blank_side_camera_cells(tmp_path, left_path, right_path) -> None:
+    Image.new("RGB", (200, 66)).save(tmp_path / "center.jpg")
+    (tmp_path / "log.csv").write_text(
+        "image_path,steering,left_image_path,right_image_path\n"
+        f"center.jpg,0.1,{left_path},{right_path}\n",
+        encoding="utf-8",
+    )
+
+    dataset = DrivingDataset(tmp_path / "log.csv")
+
+    assert dataset.targets == [0.1]
