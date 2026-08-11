@@ -65,3 +65,11 @@ PYTHONPATH=src python3 -m pytest tests/test_sampling.py tests/test_reproducibili
 
 - The CLI integration test now asserts all configuration, dataset, device, and
   package-version bindings in both the manifest and checkpoint metadata.
+
+## Re-Review Fix: Exact Package Versions
+
+- Strengthened the CLI integration test to compare manifest package-version
+  values against `importlib.metadata.version` for `numpy`, `Pillow`, `torch`,
+  and `torchvision`, using the same distribution names as the manifest writer.
+- This prevents a stale, substituted, or otherwise incorrect package version
+  from satisfying the manifest contract merely by being a string.

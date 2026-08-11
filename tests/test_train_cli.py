@@ -1,6 +1,7 @@
 """Integration tests for the training command-line interface."""
 
 import json
+from importlib.metadata import version
 import subprocess
 import sys
 from pathlib import Path
@@ -75,10 +76,12 @@ def test_training_writes_preprocessing_to_manifest_and_checkpoint(tmp_path) -> N
         "val_size": 1,
     }
     assert manifest["environment"]["device"] == "cpu"
-    assert {"numpy", "pillow", "torch", "torchvision"} <= manifest["environment"][
-        "packages"
-    ].keys()
-    assert all(isinstance(version, str) for version in manifest["environment"]["packages"].values())
+    assert manifest["environment"]["packages"] == {
+        "numpy": version("numpy"),
+        "pillow": version("Pillow"),
+        "torch": version("torch"),
+        "torchvision": version("torchvision"),
+    }
     assert checkpoint["run_manifest"] == manifest
 
 
