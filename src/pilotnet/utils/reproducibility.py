@@ -1,5 +1,6 @@
 """Reproducibility configuration and run metadata."""
 
+import os
 import random
 from dataclasses import asdict
 from typing import Any
@@ -12,6 +13,8 @@ from pilotnet.data.preprocessing import PreprocessConfig
 
 def seed_everything(seed: int, deterministic: bool) -> dict[str, object]:
     """Seed supported random generators and configure Torch determinism."""
+    if deterministic:
+        os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
     random.seed(seed)
     numpy.random.seed(seed)
     torch.manual_seed(seed)

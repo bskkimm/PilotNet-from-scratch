@@ -1,18 +1,22 @@
 """Tests for reproducible training metadata."""
 
+import os
+
 import torch
 
 from pilotnet.data import PreprocessConfig
 from pilotnet.utils.reproducibility import build_run_manifest, seed_everything
 
 
-def test_seed_everything_repeats_torch_values() -> None:
+def test_seed_everything_repeats_torch_values_and_configures_cublas(monkeypatch) -> None:
+    monkeypatch.delenv("CUBLAS_WORKSPACE_CONFIG", raising=False)
     seed_everything(7, deterministic=True)
     first = torch.rand(3)
 
     seed_everything(7, deterministic=True)
 
     assert torch.equal(first, torch.rand(3))
+    assert os.environ["CUBLAS_WORKSPACE_CONFIG"] == ":4096:8"
 
 
 def test_build_run_manifest_records_preprocessing_sampling_and_seed() -> None:
