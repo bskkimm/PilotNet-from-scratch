@@ -16,6 +16,7 @@ dependencies = ["numpy>=1.24", "pillow>=10.0", "torch>=2.2", "torchvision>=0.17"
 dev = ["pytest>=8.0", "ruff>=0.9"]
 mlflow = ["mlflow>=2.0"]
 nuscenes = ["nuscenes-devkit>=1.1.11"]
+bev = ["imageio>=2.31", "matplotlib>=3.7"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

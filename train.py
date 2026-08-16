@@ -13,6 +13,7 @@ from torch.utils.data import DataLoader
 
 from pilotnet.data import DrivingDataset, PreprocessConfig, build_balanced_sampler
 from pilotnet.engine import evaluate, train_epoch
+from pilotnet.evaluation import write_bev_artifacts
 from pilotnet.models import PilotNet
 from pilotnet.tracking import MlflowTracker
 from pilotnet.utils import build_run_manifest, seed_everything
@@ -40,11 +41,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mlflow-tracking-uri")
     parser.add_argument("--mlflow-experiment", default="PilotNet")
     parser.add_argument("--mlflow-run-name")
+    parser.add_argument("--bev-every-epochs", type=int, default=0)
+    parser.add_argument("--bev-dataroot")
+    parser.add_argument("--bev-version", default="v1.0-trainval")
+    parser.add_argument("--bev-scene")
+    parser.add_argument("--bev-anchor", type=int, default=0)
+    parser.add_argument("--bev-horizon", type=int, default=40)
+    parser.add_argument("--bev-wheelbase", type=float, default=2.5)
+    parser.add_argument("--bev-steering-scale", type=float, default=1.0)
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    if args.bev_every_epochs < 0:
+        raise ValueError("bev_every_epochs must be nonnegative.")
+    if args.bev_every_epochs and not args.bev_dataroot:
+        raise ValueError("bev_dataroot is required when BEV evaluation is enabled.")
     reproducibility = seed_everything(args.seed, args.deterministic)
     device = torch.device(args.device)
     artifact_dir = Path(args.artifact_dir)
@@ -166,6 +179,25 @@ def main() -> None:
             )
             if tracker is not None:
                 tracker.log_artifact(checkpoint_path, artifact_path="checkpoints")
+        if args.bev_every_epochs and epoch % args.bev_every_epochs == 0:
+            bev_artifacts = write_bev_artifacts(
+                model,
+                csv_path=args.val_csv,
+                dataroot=args.bev_dataroot,
+                version=args.bev_version,
+                output_dir=artifact_dir / "bev",
+                preprocess=preprocessing,
+                device=device,
+                epoch=epoch,
+                scene_name=args.bev_scene,
+                anchor=args.bev_anchor,
+                horizon=args.bev_horizon,
+                wheelbase=args.bev_wheelbase,
+                steering_scale=args.bev_steering_scale,
+            )
+            if tracker is not None:
+                tracker.log_artifact(bev_artifacts.png, artifact_path="bev")
+                tracker.log_artifact(bev_artifacts.gif, artifact_path="bev")
     history_path = artifact_dir / "history.json"
     history_path.write_text(json.dumps(history, indent=2), encoding="utf-8")
     if tracker is not None:
