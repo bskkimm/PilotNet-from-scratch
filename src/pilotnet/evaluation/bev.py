@@ -124,11 +124,13 @@ def write_bev_artifacts(
     horizon: int = 40,
     wheelbase: float = 2.5,
     steering_scale: float = 1.0,
+    gif_frames: int = 8,
 ) -> BevArtifacts:
     """Render fixed-scene local/global nuScenes maps with predicted and GT paths."""
     try:
         import imageio.v2 as imageio
         import matplotlib.pyplot as plt
+        from nuscenes.map_expansion.bitmap import BitMap
         from nuscenes.map_expansion.map_api import NuScenesMap
         from nuscenes.nuscenes import NuScenes
         from pyquaternion import Quaternion
@@ -137,6 +139,8 @@ def write_bev_artifacts(
         raise RuntimeError(message) from error
 
     csv_path = Path(csv_path)
+    if gif_frames < 1:
+        raise ValueError("gif_frames must be positive.")
     rows = _rows_for_anchor(csv_path, scene_name, anchor, horizon)
     nusc = NuScenes(version=version, dataroot=str(dataroot), verbose=False)
     scene = next(scene for scene in nusc.scene if scene["name"] == rows[0]["scene_name"])
@@ -172,9 +176,15 @@ def write_bev_artifacts(
     predicted_global = [local_to_global(x, y, origin, origin_yaw) for x, y, _ in predicted]
     xs, ys = zip(*(global_points + predicted_global))
     margin = 30.0
+    basemap = BitMap(str(dataroot), location, "basemap")
 
     def render_map(box: tuple[float, float, float, float], count: int, title: str) -> Image.Image:
-        figure, axes = map_api.render_map_patch(box, layer_names=[])
+        figure, axes = map_api.render_map_patch(
+            box,
+            layer_names=[],
+            bitmap=basemap,
+            render_legend=False,
+        )
         axes.plot(*zip(*global_points[:count]), "g.-", label="ground truth")
         axes.plot(*zip(*predicted_global[:count]), "r.-", label="predicted")
         axes.set_title(title)
@@ -213,5 +223,10 @@ def write_bev_artifacts(
         return imageio.imread(buffer.getvalue(), format="png")
 
     render(len(rows), png_path)
-    imageio.mimsave(gif_path, [render(index) for index in range(2, len(rows) + 1)], duration=0.15)
+    frame_count = min(gif_frames, len(rows) - 1)
+    frame_indices = {
+        2 + round(index * (len(rows) - 2) / max(frame_count - 1, 1))
+        for index in range(frame_count)
+    }
+    imageio.mimsave(gif_path, [render(index) for index in sorted(frame_indices)], duration=0.3)
     return BevArtifacts(png=png_path, gif=gif_path)
