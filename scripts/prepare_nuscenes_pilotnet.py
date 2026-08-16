@@ -9,7 +9,7 @@ import os
 from collections import Counter
 from pathlib import Path
 
-from pilotnet.data import PreviousCanMessage, align_control
+from pilotnet.data import TimestampInterpolator, align_control
 
 
 def parse_args() -> argparse.Namespace:
@@ -56,8 +56,10 @@ def extract_split(
                 "timestamp",
                 "scene_name",
                 "location",
-                "steering_gap_us",
-                "speed_gap_us",
+                "steering_before_gap_us",
+                "steering_after_gap_us",
+                "speed_before_gap_us",
+                "speed_after_gap_us",
             ],
         )
         writer.writeheader()
@@ -68,8 +70,9 @@ def extract_split(
             location = nusc.get("log", scene["log_token"])["location"]
             try:
                 steering_messages = can_bus.get_messages(scene["name"], "steeranglefeedback")
-                steering = PreviousCanMessage(steering_messages)
-                speed = PreviousCanMessage(can_bus.get_messages(scene["name"], "vehicle_monitor"))
+                steering = TimestampInterpolator(steering_messages)
+                speed_messages = can_bus.get_messages(scene["name"], "vehicle_monitor")
+                speed = TimestampInterpolator(speed_messages)
             except Exception:
                 audit["missing_can_scene"] += 1
                 continue
@@ -97,8 +100,10 @@ def extract_split(
                         "timestamp": record["timestamp"],
                         "scene_name": scene["name"],
                         "location": location,
-                        "steering_gap_us": control.steering_gap_us,
-                        "speed_gap_us": control.speed_gap_us,
+                        "steering_before_gap_us": control.steering_before_gap_us,
+                        "steering_after_gap_us": control.steering_after_gap_us,
+                        "speed_before_gap_us": control.speed_before_gap_us,
+                        "speed_after_gap_us": control.speed_after_gap_us,
                     }
                 )
                 audit["rows"] += 1
