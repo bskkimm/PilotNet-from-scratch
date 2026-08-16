@@ -147,7 +147,8 @@ def write_bev_artifacts(
     horizon: int = 40,
     wheelbase: float = 2.5,
     steering_scale: float = 1.0,
-    gif_frames: int = 8,
+    gif_frames: int = 50,
+    gif_frame_duration: float = 0.1,
 ) -> BevArtifacts:
     """Render fixed-scene local/global nuScenes maps with predicted and GT paths."""
     try:
@@ -164,6 +165,8 @@ def write_bev_artifacts(
     csv_path = Path(csv_path)
     if gif_frames < 1:
         raise ValueError("gif_frames must be positive.")
+    if gif_frame_duration <= 0:
+        raise ValueError("gif_frame_duration must be positive.")
     rows = _rows_for_anchor(csv_path, scene_name, anchor, horizon)
     nusc = NuScenes(version=version, dataroot=str(dataroot), verbose=False)
     scene = next(scene for scene in nusc.scene if scene["name"] == rows[0]["scene_name"])
@@ -260,6 +263,6 @@ def write_bev_artifacts(
     imageio.mimsave(
         gif_path,
         [render(index - 1) for index in sorted(frame_indices)],
-        duration=0.3,
+        duration=gif_frame_duration,
     )
     return BevArtifacts(png=png_path, gif=gif_path)

@@ -1,16 +1,15 @@
 """Integration tests for the training command-line interface."""
 
 import json
-from importlib.metadata import version
 import subprocess
 import sys
+from importlib.metadata import version
 from pathlib import Path
 
 import torch
 from PIL import Image
 
 from pilotnet.models import PilotNet
-
 
 PROJECT_ROOT = Path(__file__).parents[1]
 
@@ -68,7 +67,9 @@ def test_training_writes_preprocessing_to_manifest_and_checkpoint(tmp_path) -> N
             "bev_version": "v1.0-trainval",
             "bev_scene": None,
             "bev_anchor": 0,
-            "bev_horizon": 40,
+            "bev_horizon": 50,
+            "bev_gif_frames": 50,
+            "bev_gif_frame_duration": 0.1,
             "bev_wheelbase": 2.5,
             "bev_steering_scale": 1.0,
             "mlflow_tracking_uri": None,
@@ -122,7 +123,9 @@ def test_training_expands_validation_side_cameras_without_a_sampler(tmp_path, mo
             "bev_anchor": 0,
             "bev_dataroot": None,
             "bev_every_epochs": 0,
-            "bev_horizon": 40,
+            "bev_horizon": 50,
+            "bev_gif_frames": 50,
+            "bev_gif_frame_duration": 0.1,
             "bev_scene": None,
             "bev_steering_scale": 1.0,
             "bev_version": "v1.0-trainval",

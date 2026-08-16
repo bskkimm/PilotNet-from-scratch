@@ -46,7 +46,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bev-version", default="v1.0-trainval")
     parser.add_argument("--bev-scene")
     parser.add_argument("--bev-anchor", type=int, default=0)
-    parser.add_argument("--bev-horizon", type=int, default=40)
+    parser.add_argument("--bev-horizon", type=int, default=50)
+    parser.add_argument("--bev-gif-frames", type=int, default=50)
+    parser.add_argument("--bev-gif-frame-duration", type=float, default=0.1)
     parser.add_argument("--bev-wheelbase", type=float, default=2.5)
     parser.add_argument("--bev-steering-scale", type=float, default=1.0)
     return parser.parse_args()
@@ -158,7 +160,11 @@ def main() -> None:
     for epoch in range(1, args.epochs + 1):
         train_metrics = train_epoch(model, train_loader, optimizer, device)
         val_metrics = evaluate(model, val_loader, device)
-        row = {"epoch": epoch, **{f"train_{key}": value for key, value in train_metrics.items()}, **{f"val_{key}": value for key, value in val_metrics.items()}}
+        row = {
+            "epoch": epoch,
+            **{f"train_{key}": value for key, value in train_metrics.items()},
+            **{f"val_{key}": value for key, value in val_metrics.items()},
+        }
         if tracker is not None:
             eta = tracker.log_epoch(row, epoch, args.epochs)
             row["eta_hours"] = eta.eta_seconds / 3600.0
@@ -192,6 +198,8 @@ def main() -> None:
                 scene_name=args.bev_scene,
                 anchor=args.bev_anchor,
                 horizon=args.bev_horizon,
+                gif_frames=args.bev_gif_frames,
+                gif_frame_duration=args.bev_gif_frame_duration,
                 wheelbase=args.bev_wheelbase,
                 steering_scale=args.bev_steering_scale,
             )
