@@ -9,7 +9,7 @@ from io import BytesIO
 from pathlib import Path
 
 import torch
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from pilotnet.data import PreprocessConfig, preprocess_image
 
@@ -199,61 +199,56 @@ def write_bev_artifacts(
     margin = 30.0
     basemap = BitMap(str(dataroot), location, "basemap")
 
-    def render(frame_index: int, filename: Path | None = None) -> Image.Image:
-        from matplotlib.patches import Polygon
+    box = (
+        origin[0] - margin,
+        origin[1] - margin,
+        origin[0] + margin,
+        origin[1] + margin,
+    )
+    figure, axes = map_api.render_map_patch(
+        box,
+        layer_names=[],
+        bitmap=basemap,
+        render_legend=False,
+        render_egoposes_range=False,
+    )
+    axes.set_title(f"Epoch {epoch}: anchor-centered BEV")
+    axes.set_xlabel("global x (m)")
+    axes.set_ylabel("global y (m)")
+    figure.canvas.draw()
+    width, height = figure.canvas.get_width_height()
+    background = Image.frombytes(
+        "RGBA",
+        (width, height),
+        figure.canvas.buffer_rgba(),
+    ).convert("RGB")
+    data_to_pixel = axes.transData.frozen()
+    plt.close(figure)
 
-        box = (
-            origin[0] - margin,
-            origin[1] - margin,
-            origin[0] + margin,
-            origin[1] + margin,
-        )
-        figure, axes = map_api.render_map_patch(
-            box,
-            layer_names=[],
-            bitmap=basemap,
-            render_legend=False,
-            render_egoposes_range=False,
-        )
+    def render(frame_index: int, filename: Path | None = None) -> Image.Image:
+        image = background.copy()
+        draw = ImageDraw.Draw(image, "RGBA")
         ground_truth_pose = poses[frame_index]
         predicted_x, predicted_y = predicted_global[frame_index]
         predicted_yaw = origin_yaw + predicted[frame_index][2]
-        axes.add_patch(
-            Polygon(
-                vehicle_polygon(
-                    ground_truth_pose["translation"][0],
-                    ground_truth_pose["translation"][1],
-                    headings[frame_index],
-                ),
-                facecolor="limegreen",
-                edgecolor="darkgreen",
-                alpha=0.8,
-                label="ground truth ego",
-            )
+        ground_truth_polygon = vehicle_polygon(
+            ground_truth_pose["translation"][0],
+            ground_truth_pose["translation"][1],
+            headings[frame_index],
         )
-        axes.add_patch(
-            Polygon(
-                vehicle_polygon(predicted_x, predicted_y, predicted_yaw),
-                facecolor="red",
-                edgecolor="darkred",
-                alpha=0.65,
-                label="predicted ego",
-            )
+        predicted_polygon = vehicle_polygon(predicted_x, predicted_y, predicted_yaw)
+        polygons = (
+            (ground_truth_polygon, (0, 200, 0, 200)),
+            (predicted_polygon, (255, 0, 0, 170)),
         )
-        axes.set_title(f"Epoch {epoch}: anchor-centered BEV")
-        axes.set_xlabel("global x (m)")
-        axes.set_ylabel("global y (m)")
-        axes.legend()
-        buffer = BytesIO()
-        figure.savefig(buffer, format="png", dpi=100, bbox_inches="tight")
-        plt.close(figure)
-        return Image.open(buffer).convert("RGB")
-
+        for polygon, color in polygons:
+            points = data_to_pixel.transform(polygon)
+            draw.polygon([(round(x), round(image.height - y)) for x, y in points], fill=color)
+        draw.text((16, 16), "green: ground truth   red: predicted", fill=(0, 0, 0, 255))
         if filename is not None:
-            figure.savefig(filename, dpi=100, bbox_inches="tight")
+            image.save(filename)
         buffer = BytesIO()
-        figure.savefig(buffer, format="png", dpi=100, bbox_inches="tight")
-        plt.close(figure)
+        image.save(buffer, format="PNG")
         return imageio.imread(buffer.getvalue(), format="png")
 
     render(len(rows) - 1, png_path)
