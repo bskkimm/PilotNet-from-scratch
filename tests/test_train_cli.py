@@ -60,8 +60,11 @@ def test_training_writes_preprocessing_to_manifest_and_checkpoint(tmp_path) -> N
         "deterministic": False,
         "device": "cpu",
         "epochs": 1,
-        "lr": 1e-4,
-        "seed": 42,
+            "lr": 1e-4,
+            "mlflow_experiment": "PilotNet",
+            "mlflow_run_name": None,
+            "mlflow_tracking_uri": None,
+            "seed": 42,
         "side_camera_correction": None,
         "balance_bins": 5,
         "train_csv": str((tmp_path / "train.csv").resolve()),
@@ -117,6 +120,9 @@ def test_training_expands_validation_side_cameras_without_a_sampler(tmp_path, mo
             "side_camera_correction": 0.2,
             "balance_bins": 5,
             "device": "cpu",
+            "mlflow_tracking_uri": None,
+            "mlflow_experiment": "PilotNet",
+            "mlflow_run_name": None,
         },
     )()
     loaders = []

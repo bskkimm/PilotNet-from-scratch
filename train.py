@@ -14,6 +14,7 @@ from torch.utils.data import DataLoader
 from pilotnet.data import DrivingDataset, PreprocessConfig, build_balanced_sampler
 from pilotnet.engine import evaluate, train_epoch
 from pilotnet.models import PilotNet
+from pilotnet.tracking import MlflowTracker
 from pilotnet.utils import build_run_manifest, seed_everything
 
 
@@ -36,6 +37,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--side-camera-correction", type=float)
     parser.add_argument("--balance-bins", type=int, default=20)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--mlflow-tracking-uri")
+    parser.add_argument("--mlflow-experiment", default="PilotNet")
+    parser.add_argument("--mlflow-run-name")
     return parser.parse_args()
 
 
@@ -113,6 +117,27 @@ def main() -> None:
     (artifact_dir / "run_manifest.json").write_text(
         json.dumps(run_manifest, indent=2), encoding="utf-8"
     )
+    tracker = None
+    if args.mlflow_tracking_uri:
+        tracker = MlflowTracker(
+            tracking_uri=args.mlflow_tracking_uri,
+            experiment_name=args.mlflow_experiment,
+            run_name=args.mlflow_run_name,
+            parameters={
+                "epochs": args.epochs,
+                "batch_size": args.batch_size,
+                "lr": args.lr,
+                "weight_decay": args.weight_decay,
+                "balance_bins": args.balance_bins,
+                "seed": args.seed,
+                "train_size": len(train_dataset),
+                "val_size": len(val_dataset),
+            },
+        )
+        tracker.log_artifact(artifact_dir / "run_manifest.json", artifact_path="metadata")
+        audit_path = train_dataset.csv_path.parent / "audit.json"
+        if audit_path.is_file():
+            tracker.log_artifact(audit_path, artifact_path="metadata")
     model = PilotNet().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     history: list[dict[str, float | int]] = []
@@ -121,10 +146,14 @@ def main() -> None:
         train_metrics = train_epoch(model, train_loader, optimizer, device)
         val_metrics = evaluate(model, val_loader, device)
         row = {"epoch": epoch, **{f"train_{key}": value for key, value in train_metrics.items()}, **{f"val_{key}": value for key, value in val_metrics.items()}}
+        if tracker is not None:
+            eta = tracker.log_epoch(row, epoch, args.epochs)
+            row["eta_hours"] = eta.eta_seconds / 3600.0
         history.append(row)
         print(json.dumps(row))
         if val_metrics["mse"] < best_mse:
             best_mse = val_metrics["mse"]
+            checkpoint_path = artifact_dir / "best.pt"
             torch.save(
                 {
                     "model_state_dict": model.state_dict(),
@@ -133,9 +162,15 @@ def main() -> None:
                     "args": vars(args),
                     "run_manifest": run_manifest,
                 },
-                artifact_dir / "best.pt",
+                checkpoint_path,
             )
-    (artifact_dir / "history.json").write_text(json.dumps(history, indent=2), encoding="utf-8")
+            if tracker is not None:
+                tracker.log_artifact(checkpoint_path, artifact_path="checkpoints")
+    history_path = artifact_dir / "history.json"
+    history_path.write_text(json.dumps(history, indent=2), encoding="utf-8")
+    if tracker is not None:
+        tracker.log_artifact(history_path, artifact_path="metadata")
+        tracker.close()
 
 
 if __name__ == "__main__":

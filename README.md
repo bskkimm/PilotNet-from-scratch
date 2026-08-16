@@ -24,6 +24,12 @@ Use `notebooks/pilotnet_walkthrough.ipynb` for the architecture and training wal
 python3 -m pip install -e '.[dev]'
 ```
 
+Install optional nuScenes extraction and MLflow support when needed:
+
+```bash
+python3 -m pip install -e '.[nuscenes,mlflow]'
+```
+
 ## Data
 
 Training and validation each use a CSV with `image_path` and `steering` columns. Image paths are relative to the CSV file. Images are resized to `200x66`; training applies horizontal flips and negates the matching steering target.
@@ -40,6 +46,14 @@ Keep related frames in the same split to avoid route or temporal leakage.
 ```bash
 python3 train.py --train-csv data/train.csv --val-csv data/val.csv
 python3 eval.py --checkpoint artifacts/train/best.pt --csv data/val.csv
+```
+
+Track a CLI run with MLflow:
+
+```bash
+python3 train.py --train-csv data/train.csv --val-csv data/val.csv \
+  --mlflow-tracking-uri sqlite:///artifacts/mlflow.db \
+  --mlflow-experiment PilotNet --mlflow-run-name baseline
 ```
 
 ## Layout
