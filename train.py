@@ -41,6 +41,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mlflow-tracking-uri")
     parser.add_argument("--mlflow-experiment", default="PilotNet")
     parser.add_argument("--mlflow-run-name")
+    parser.add_argument("--resume", type=Path)
     parser.add_argument("--bev-every-epochs", type=int, default=0)
     parser.add_argument("--bev-dataroot")
     parser.add_argument("--bev-version", default="v1.0-trainval")
@@ -157,7 +158,22 @@ def main() -> None:
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     history: list[dict[str, float | int]] = []
     best_mse = float("inf")
-    for epoch in range(1, args.epochs + 1):
+    start_epoch = 0
+    if args.resume is not None:
+        checkpoint = torch.load(args.resume, map_location=device, weights_only=False)
+        model.load_state_dict(checkpoint["model_state_dict"])
+        if "optimizer_state_dict" in checkpoint:
+            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        start_epoch = int(checkpoint.get("epoch", 0))
+        checkpoint_best_mse = checkpoint.get(
+            "best_val_mse",
+            checkpoint.get("val_metrics", {}).get("mse"),
+        )
+        if checkpoint_best_mse is not None:
+            best_mse = float(checkpoint_best_mse)
+        history = list(checkpoint.get("history", []))
+        print(f"resumed_checkpoint={args.resume} start_epoch={start_epoch}")
+    for epoch in range(start_epoch + 1, args.epochs + 1):
         train_metrics = train_epoch(model, train_loader, optimizer, device)
         val_metrics = evaluate(model, val_loader, device)
         row = {
@@ -176,8 +192,11 @@ def main() -> None:
             torch.save(
                 {
                     "model_state_dict": model.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
                     "epoch": epoch,
                     "val_metrics": val_metrics,
+                    "best_val_mse": best_mse,
+                    "history": history,
                     "args": vars(args),
                     "run_manifest": run_manifest,
                 },
@@ -185,6 +204,19 @@ def main() -> None:
             )
             if tracker is not None:
                 tracker.log_artifact(checkpoint_path, artifact_path="checkpoints")
+        torch.save(
+            {
+                "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "epoch": epoch,
+                "val_metrics": val_metrics,
+                "best_val_mse": best_mse,
+                "history": history,
+                "args": vars(args),
+                "run_manifest": run_manifest,
+            },
+            artifact_dir / "last.pt",
+        )
         if args.bev_every_epochs and epoch % args.bev_every_epochs == 0:
             bev_artifacts = write_bev_artifacts(
                 model,
