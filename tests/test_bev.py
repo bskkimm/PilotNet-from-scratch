@@ -8,6 +8,7 @@ from pilotnet.evaluation.bev import (
     camera_timestamp_index,
     local_to_global,
     rollout_bicycle,
+    vehicle_polygon,
 )
 
 
@@ -64,3 +65,9 @@ def test_camera_timestamp_index_follows_selected_scene_camera_chain() -> None:
 
     assert index[10]["ego_pose_token"] == "pose-1"
     assert index[20]["ego_pose_token"] == "pose-2"
+
+
+def test_vehicle_polygon_rotates_a_vehicle_footprint() -> None:
+    corners = vehicle_polygon(0.0, 0.0, math.pi / 2.0, length=4.0, width=2.0)
+
+    assert corners[0] == pytest.approx((-1.0, 2.0))

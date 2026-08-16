@@ -109,6 +109,29 @@ def local_to_global(
     return (origin[0] + cos_yaw * x - sin_yaw * y, origin[1] + sin_yaw * x + cos_yaw * y)
 
 
+def vehicle_polygon(
+    x: float,
+    y: float,
+    yaw: float,
+    *,
+    length: float = 4.1,
+    width: float = 1.8,
+) -> list[tuple[float, float]]:
+    """Return a centered, rotated vehicle footprint."""
+    half_length, half_width = length / 2.0, width / 2.0
+    corners = [
+        (half_length, half_width),
+        (half_length, -half_width),
+        (-half_length, -half_width),
+        (-half_length, half_width),
+    ]
+    cos_yaw, sin_yaw = math.cos(yaw), math.sin(yaw)
+    return [
+        (x + cos_yaw * dx - sin_yaw * dy, y + sin_yaw * dx + cos_yaw * dy)
+        for dx, dy in corners
+    ]
+
+
 def write_bev_artifacts(
     model: torch.nn.Module,
     *,
@@ -172,22 +195,52 @@ def write_bev_artifacts(
     png_path = output_dir / f"bev_epoch_{epoch:03d}.png"
     gif_path = output_dir / f"bev_epoch_{epoch:03d}.gif"
     map_api = NuScenesMap(dataroot=str(dataroot), map_name=location)
-    global_points = [(pose["translation"][0], pose["translation"][1]) for pose in poses]
     predicted_global = [local_to_global(x, y, origin, origin_yaw) for x, y, _ in predicted]
-    xs, ys = zip(*(global_points + predicted_global))
     margin = 30.0
     basemap = BitMap(str(dataroot), location, "basemap")
 
-    def render_map(box: tuple[float, float, float, float], count: int, title: str) -> Image.Image:
+    def render(frame_index: int, filename: Path | None = None) -> Image.Image:
+        from matplotlib.patches import Polygon
+
+        box = (
+            origin[0] - margin,
+            origin[1] - margin,
+            origin[0] + margin,
+            origin[1] + margin,
+        )
         figure, axes = map_api.render_map_patch(
             box,
             layer_names=[],
             bitmap=basemap,
             render_legend=False,
+            render_egoposes_range=False,
         )
-        axes.plot(*zip(*global_points[:count]), "g.-", label="ground truth")
-        axes.plot(*zip(*predicted_global[:count]), "r.-", label="predicted")
-        axes.set_title(title)
+        ground_truth_pose = poses[frame_index]
+        predicted_x, predicted_y = predicted_global[frame_index]
+        predicted_yaw = origin_yaw + predicted[frame_index][2]
+        axes.add_patch(
+            Polygon(
+                vehicle_polygon(
+                    ground_truth_pose["translation"][0],
+                    ground_truth_pose["translation"][1],
+                    headings[frame_index],
+                ),
+                facecolor="limegreen",
+                edgecolor="darkgreen",
+                alpha=0.8,
+                label="ground truth ego",
+            )
+        )
+        axes.add_patch(
+            Polygon(
+                vehicle_polygon(predicted_x, predicted_y, predicted_yaw),
+                facecolor="red",
+                edgecolor="darkred",
+                alpha=0.65,
+                label="predicted ego",
+            )
+        )
+        axes.set_title(f"Epoch {epoch}: anchor-centered BEV")
         axes.set_xlabel("global x (m)")
         axes.set_ylabel("global y (m)")
         axes.legend()
@@ -196,37 +249,22 @@ def write_bev_artifacts(
         plt.close(figure)
         return Image.open(buffer).convert("RGB")
 
-    def render(count: int, filename: Path | None = None):
-        global_box = (min(xs) - margin, min(ys) - margin, max(xs) + margin, max(ys) + margin)
-        local_box = (
-            origin[0] - margin,
-            origin[1] - margin,
-            origin[0] + margin,
-            origin[1] + margin,
-        )
-        global_image = render_map(global_box, count, "Global map")
-        local_image = render_map(
-            local_box,
-            count,
-            "Anchor-centered map patch (global coordinates)",
-        )
-        combined = Image.new(
-            "RGB",
-            (global_image.width + local_image.width, max(global_image.height, local_image.height)),
-        )
-        combined.paste(global_image, (0, 0))
-        combined.paste(local_image, (global_image.width, 0))
         if filename is not None:
-            combined.save(filename)
+            figure.savefig(filename, dpi=100, bbox_inches="tight")
         buffer = BytesIO()
-        combined.save(buffer, format="PNG")
+        figure.savefig(buffer, format="png", dpi=100, bbox_inches="tight")
+        plt.close(figure)
         return imageio.imread(buffer.getvalue(), format="png")
 
-    render(len(rows), png_path)
+    render(len(rows) - 1, png_path)
     frame_count = min(gif_frames, len(rows) - 1)
     frame_indices = {
         2 + round(index * (len(rows) - 2) / max(frame_count - 1, 1))
         for index in range(frame_count)
     }
-    imageio.mimsave(gif_path, [render(index) for index in sorted(frame_indices)], duration=0.3)
+    imageio.mimsave(
+        gif_path,
+        [render(index - 1) for index in sorted(frame_indices)],
+        duration=0.3,
+    )
     return BevArtifacts(png=png_path, gif=gif_path)
