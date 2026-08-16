@@ -30,7 +30,14 @@ def select_best_configuration(results: list[BenchmarkResult]) -> BenchmarkResult
     """Choose maximum throughput, preferring lower resource use for ties."""
     if not results:
         raise ValueError("No successful benchmark configurations.")
-    return min(results, key=lambda result: (-result.samples_per_second, result.batch_size, result.workers))
+    return min(
+        results,
+        key=lambda result: (
+            -result.samples_per_second,
+            result.batch_size,
+            result.workers,
+        ),
+    )
 
 
 def _synchronize(device: torch.device) -> None:
@@ -82,7 +89,13 @@ def benchmark_configurations(
                 elapsed = time.perf_counter() - started
                 results.append(BenchmarkResult(batch_size, worker_count, samples / elapsed))
             except torch.cuda.OutOfMemoryError:
-                failures.append({"batch_size": batch_size, "workers": worker_count, "error": "cuda_oom"})
+                failures.append(
+                    {
+                        "batch_size": batch_size,
+                        "workers": worker_count,
+                        "error": "cuda_oom",
+                    }
+                )
                 if device.type == "cuda":
                     torch.cuda.empty_cache()
     return results, failures

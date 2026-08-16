@@ -4,7 +4,11 @@ import math
 
 import pytest
 
-from pilotnet.evaluation.bev import local_to_global, rollout_bicycle
+from pilotnet.evaluation.bev import (
+    camera_timestamp_index,
+    local_to_global,
+    rollout_bicycle,
+)
 
 
 def test_rollout_bicycle_integrates_straight_motion_from_timestamps() -> None:
@@ -37,3 +41,26 @@ def test_local_to_global_rotates_predicted_coordinates_at_anchor() -> None:
     position = local_to_global(2.0, 0.0, [10.0, 20.0], math.pi / 2)
 
     assert position == pytest.approx((10.0, 22.0))
+
+
+def test_camera_timestamp_index_follows_selected_scene_camera_chain() -> None:
+    class NuScenes:
+        records = {
+            ("sample", "first"): {"data": {"CAM_FRONT": "front-1"}},
+            (
+                "sample_data",
+                "front-1",
+            ): {"timestamp": 10, "next": "front-2", "ego_pose_token": "pose-1"},
+            (
+                "sample_data",
+                "front-2",
+            ): {"timestamp": 20, "next": "", "ego_pose_token": "pose-2"},
+        }
+
+        def get(self, table: str, token: str) -> dict[str, object]:
+            return self.records[(table, token)]
+
+    index = camera_timestamp_index(NuScenes(), {"first_sample_token": "first"})
+
+    assert index[10]["ego_pose_token"] == "pose-1"
+    assert index[20]["ego_pose_token"] == "pose-2"
