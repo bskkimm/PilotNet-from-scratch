@@ -27,6 +27,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--workers", type=int, default=8)
+    parser.add_argument("--prefetch-factor", type=int, default=1)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--sequence-length", type=int, default=5)
@@ -86,6 +87,8 @@ def main() -> None:
     args = parse_args()
     if args.freeze_encoder_epochs < 0 or args.bev_every_epochs < 0:
         raise ValueError("freeze_encoder_epochs and bev_every_epochs must be nonnegative.")
+    if args.workers < 0 or args.prefetch_factor < 1:
+        raise ValueError("workers must be nonnegative and prefetch_factor must be positive.")
     if args.bev_every_epochs and not args.bev_dataroot:
         raise ValueError("bev_dataroot is required when BEV evaluation is enabled.")
     reproducibility = seed_everything(args.seed, args.deterministic)
@@ -112,6 +115,8 @@ def main() -> None:
         "pin_memory": device.type == "cuda",
         "persistent_workers": args.workers > 0,
     }
+    if args.workers > 0:
+        loader_options["prefetch_factor"] = args.prefetch_factor
     train_loader = DataLoader(train_dataset, shuffle=True, **loader_options)
     val_loader = DataLoader(val_dataset, shuffle=False, **loader_options)
     configuration = {
