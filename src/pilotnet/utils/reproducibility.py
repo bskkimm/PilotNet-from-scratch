@@ -2,7 +2,7 @@
 
 import os
 import random
-from dataclasses import asdict
+from dataclasses import asdict, is_dataclass
 from typing import Any
 
 import numpy
@@ -25,14 +25,14 @@ def seed_everything(seed: int, deterministic: bool) -> dict[str, object]:
 
 def build_run_manifest(
     *,
-    preprocessing: PreprocessConfig,
+    preprocessing: PreprocessConfig | dict[str, object],
     sampling: dict[str, object],
     reproducibility: dict[str, object],
     **metadata: Any,
 ) -> dict[str, object]:
     """Build JSON-serializable metadata for a training run."""
     return {
-        "preprocessing": asdict(preprocessing),
+        "preprocessing": asdict(preprocessing) if is_dataclass(preprocessing) else preprocessing,
         "sampling": sampling,
         "reproducibility": reproducibility,
         **metadata,

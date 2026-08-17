@@ -11,7 +11,12 @@ from pathlib import Path
 import torch
 from PIL import Image, ImageDraw
 
-from pilotnet.data import PreprocessConfig, preprocess_image
+from pilotnet.data import (
+    PreprocessConfig,
+    TemporalPreprocessConfig,
+    preprocess_image,
+    preprocess_temporal_image,
+)
 
 
 @dataclass(frozen=True)
@@ -149,6 +154,9 @@ def write_bev_artifacts(
     steering_scale: float = 1.0,
     gif_frames: int = 50,
     gif_frame_duration: float = 0.1,
+    sequence_length: int = 1,
+    temporal_preprocess: TemporalPreprocessConfig | None = None,
+    speed_scale: float = 30.0,
 ) -> BevArtifacts:
     """Render fixed-scene local/global nuScenes maps with predicted and GT paths."""
     try:
@@ -167,6 +175,10 @@ def write_bev_artifacts(
         raise ValueError("gif_frames must be positive.")
     if gif_frame_duration <= 0:
         raise ValueError("gif_frame_duration must be positive.")
+    if sequence_length < 1:
+        raise ValueError("sequence_length must be positive.")
+    if speed_scale <= 0:
+        raise ValueError("speed_scale must be positive.")
     rows = _rows_for_anchor(csv_path, scene_name, anchor, horizon)
     nusc = NuScenes(version=version, dataroot=str(dataroot), verbose=False)
     scene = next(scene for scene in nusc.scene if scene["name"] == rows[0]["scene_name"])
@@ -179,12 +191,32 @@ def write_bev_artifacts(
 
     model.eval()
     predictions: list[float] = []
+    all_scene_rows = _rows_for_anchor(csv_path, scene_name, 0, 1_000_000)
+    positions = {int(row["timestamp"]): index for index, row in enumerate(all_scene_rows)}
     with torch.inference_mode():
         for row in rows:
-            with Image.open(csv_path.parent / row["image_path"]) as image_file:
-                image = preprocess_image(image_file.convert("RGB"), preprocess)
-                image = image.unsqueeze(0).to(device)
-            predictions.append(float(model(image).item()))
+            if temporal_preprocess is None:
+                with Image.open(csv_path.parent / row["image_path"]) as image_file:
+                    image = preprocess_image(image_file.convert("RGB"), preprocess)
+                    image = image.unsqueeze(0).to(device)
+                predictions.append(float(model(image).item()))
+                continue
+            end = positions[int(row["timestamp"])]
+            window = all_scene_rows[max(0, end - sequence_length + 1) : end + 1]
+            window = [window[0]] * (sequence_length - len(window)) + window
+            images = []
+            for history_row in window:
+                with Image.open(csv_path.parent / history_row["image_path"]) as image_file:
+                    images.append(
+                        preprocess_temporal_image(image_file.convert("RGB"), temporal_preprocess)
+                    )
+            speeds = torch.tensor(
+                [[float(history_row["speed"]) / speed_scale for history_row in window]],
+                dtype=torch.float32,
+                device=device,
+            )
+            sequence = torch.stack(images).unsqueeze(0).to(device)
+            predictions.append(float(model(sequence, speeds).item()))
     predicted = rollout_bicycle(
         predictions,
         [float(row["speed"]) for row in rows],

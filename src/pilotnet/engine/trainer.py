@@ -7,7 +7,9 @@ from torch import nn
 from torch.utils.data import DataLoader
 
 
-def _metrics(total_squared_error: float, total_absolute_error: float, count: int) -> dict[str, float]:
+def _metrics(
+    total_squared_error: float, total_absolute_error: float, count: int
+) -> dict[str, float]:
     return {"mse": total_squared_error / count, "mae": total_absolute_error / count}
 
 
@@ -45,6 +47,51 @@ def evaluate(model: nn.Module, dataloader: DataLoader, device: torch.device) -> 
     count = 0
     for images, targets in dataloader:
         errors = model(images.to(device)) - targets.to(device)
+        squared_error += errors.square().sum().item()
+        absolute_error += errors.abs().sum().item()
+        count += targets.numel()
+    return _metrics(squared_error, absolute_error, count)
+
+
+def train_temporal_epoch(
+    model: nn.Module,
+    dataloader: DataLoader,
+    optimizer: torch.optim.Optimizer,
+    device: torch.device,
+    *,
+    freeze_encoder: bool = False,
+) -> dict[str, float]:
+    """Optimize a temporal steering model with robust Smooth L1 loss."""
+    model.train()
+    if freeze_encoder:
+        model.encoder.eval()
+    squared_error = 0.0
+    absolute_error = 0.0
+    count = 0
+    for images, speeds, targets in dataloader:
+        images, speeds, targets = images.to(device), speeds.to(device), targets.to(device)
+        predictions = model(images, speeds)
+        errors = predictions - targets
+        optimizer.zero_grad()
+        torch.nn.functional.smooth_l1_loss(predictions, targets).backward()
+        optimizer.step()
+        squared_error += errors.detach().square().sum().item()
+        absolute_error += errors.detach().abs().sum().item()
+        count += targets.numel()
+    return _metrics(squared_error, absolute_error, count)
+
+
+@torch.inference_mode()
+def evaluate_temporal(
+    model: nn.Module, dataloader: DataLoader, device: torch.device
+) -> dict[str, float]:
+    """Measure raw steering error for temporal image sequences."""
+    model.eval()
+    squared_error = 0.0
+    absolute_error = 0.0
+    count = 0
+    for images, speeds, targets in dataloader:
+        errors = model(images.to(device), speeds.to(device)) - targets.to(device)
         squared_error += errors.square().sum().item()
         absolute_error += errors.abs().sum().item()
         count += targets.numel()
