@@ -41,6 +41,28 @@ images/frame_0001.jpg,-0.12
 
 Keep related frames in the same split to avoid route or temporal leakage.
 
+### Udacity Behavioral Cloning
+
+NVIDIA did not release the original PilotNet training data. The public Udacity
+Behavioral Cloning dataset is a documented substitute, not the original dataset.
+After downloading and extracting it so `driving_log.csv` and `IMG/` share a
+directory, convert the headerless log into the CSV format above:
+
+```bash
+python3 scripts/prepare_udacity_pilotnet.py \
+  --driving-log /path/to/udacity/driving_log.csv \
+  --output-dir data/udacity
+```
+
+The converter uses a contiguous tail validation split to avoid random temporal
+leakage. Its output keeps left/right camera paths, so train with a documented
+recovery correction:
+
+```bash
+python3 train.py --train-csv data/udacity/train.csv --val-csv data/udacity/val.csv \
+  --side-camera-correction 0.2
+```
+
 ## Run
 
 ```bash
