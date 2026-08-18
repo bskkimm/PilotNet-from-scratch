@@ -15,6 +15,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--total-epochs", type=int, required=True)
     parser.add_argument("--tracking-uri", required=True)
+    parser.add_argument("--initial-epochs", type=int, default=0)
+    parser.add_argument("--initial-elapsed-hours", type=float, default=0.0)
     parser.add_argument("--poll-interval", type=float, default=60.0)
     parser.add_argument("--timezone", default="Asia/Seoul")
     parser.add_argument("--once", action="store_true")
@@ -45,11 +47,12 @@ def overview(
     completed_epochs: int,
     total_epochs: int,
     start_time: float,
+    initial_elapsed_seconds: float,
     latest_completion: float | None,
     now: float,
     timezone_name: str,
 ) -> tuple[dict[str, float], str, str]:
-    elapsed_seconds = max(now - start_time, 0.0)
+    elapsed_seconds = max(initial_elapsed_seconds + now - start_time, 0.0)
     metrics = {
         "training_completed_epochs": float(completed_epochs),
         "training_progress_percent": 100.0 * completed_epochs / total_epochs,
@@ -58,7 +61,9 @@ def overview(
     lines = ["## Training Progress", "", f"- **Elapsed:** {format_duration(elapsed_seconds)}"]
     finish_text = "Unknown until epoch 1 completes"
     if completed_epochs and latest_completion is not None:
-        mean_epoch_seconds = (latest_completion - start_time) / completed_epochs
+        mean_epoch_seconds = (
+            initial_elapsed_seconds + latest_completion - start_time
+        ) / completed_epochs
         expected_finish = latest_completion + mean_epoch_seconds * (total_epochs - completed_epochs)
         eta_seconds = max(expected_finish - now, 0.0)
         metrics.update(
@@ -95,12 +100,13 @@ def overview(
 def update(client: MlflowClient, args: argparse.Namespace) -> int:
     run = client.get_run(args.run_id)
     latest = latest_epoch(client, args.run_id)
-    completed_epochs, completion_time = latest or (0, None)
+    completed_epochs, completion_time = latest or (args.initial_epochs, None)
     now = time.time()
     metrics, description, finish_text = overview(
         completed_epochs=completed_epochs,
         total_epochs=args.total_epochs,
         start_time=run.info.start_time / 1000.0,
+        initial_elapsed_seconds=args.initial_elapsed_hours * 3600.0,
         latest_completion=completion_time,
         now=now,
         timezone_name=args.timezone,
@@ -119,8 +125,13 @@ def update(client: MlflowClient, args: argparse.Namespace) -> int:
 
 def main() -> None:
     args = parse_args()
-    if args.total_epochs < 1 or args.poll_interval <= 0:
-        raise ValueError("total_epochs and poll_interval must be positive.")
+    if (
+        args.total_epochs < 1
+        or args.poll_interval <= 0
+        or not 0 <= args.initial_epochs <= args.total_epochs
+        or args.initial_elapsed_hours < 0
+    ):
+        raise ValueError("Monitor arguments must be valid nonnegative values.")
     client = MlflowClient(tracking_uri=args.tracking_uri)
     while True:
         completed_epochs = update(client, args)
