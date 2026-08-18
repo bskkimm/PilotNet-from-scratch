@@ -88,6 +88,7 @@ def main() -> None:
         "device": str(device),
         "train_csv": resolved_train_csv,
         "val_csv": resolved_val_csv,
+        "resume": str(args.resume.resolve()) if args.resume is not None else None,
     }
     loader_options = {
         "batch_size": args.batch_size,

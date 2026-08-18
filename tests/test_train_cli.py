@@ -98,6 +98,32 @@ def test_training_writes_preprocessing_to_manifest_and_checkpoint(tmp_path) -> N
     }
     assert checkpoint["run_manifest"] == manifest
 
+    subprocess.run(
+        [
+            sys.executable,
+            "train.py",
+            "--train-csv",
+            str(tmp_path / "train.csv"),
+            "--val-csv",
+            str(tmp_path / "val.csv"),
+            "--output-dir",
+            str(output_dir),
+            "--resume",
+            str(output_dir / "best.pt"),
+            "--epochs",
+            "2",
+            "--workers",
+            "0",
+            "--device",
+            "cpu",
+        ],
+        check=True,
+        cwd=PROJECT_ROOT,
+    )
+
+    resumed_manifest = json.loads((output_dir / "run_manifest.json").read_text(encoding="utf-8"))
+    assert resumed_manifest["configuration"]["resume"] == str((output_dir / "best.pt").resolve())
+
 
 def test_training_expands_validation_side_cameras_without_a_sampler(tmp_path, monkeypatch) -> None:
     import train
