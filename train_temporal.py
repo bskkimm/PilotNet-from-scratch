@@ -28,6 +28,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--prefetch-factor", type=int, default=1)
+    parser.add_argument("--persistent-workers", action="store_true")
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--sequence-length", type=int, default=5)
@@ -113,7 +114,7 @@ def main() -> None:
         "batch_size": args.batch_size,
         "num_workers": args.workers,
         "pin_memory": device.type == "cuda",
-        "persistent_workers": args.workers > 0,
+        "persistent_workers": args.persistent_workers and args.workers > 0,
     }
     if args.workers > 0:
         loader_options["prefetch_factor"] = args.prefetch_factor
