@@ -30,6 +30,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--prefetch-factor", type=int, default=1)
     parser.add_argument("--persistent-workers", action="store_true")
     parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--resume-lr", type=float)
+    parser.add_argument("--lr-scheduler", choices=("none", "plateau"), default="none")
+    parser.add_argument("--lr-scheduler-factor", type=float, default=0.3)
+    parser.add_argument("--lr-scheduler-patience", type=int, default=2)
+    parser.add_argument("--min-lr", type=float, default=1e-6)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--sequence-length", type=int, default=5)
     parser.add_argument("--max-frame-gap-us", type=int, default=200_000)
@@ -64,6 +69,7 @@ def parse_args() -> argparse.Namespace:
 def _checkpoint(
     model: TemporalResNetGRU,
     optimizer: torch.optim.Optimizer,
+    scheduler: torch.optim.lr_scheduler.ReduceLROnPlateau | None,
     epoch: int,
     metrics: dict[str, float],
     best_mse: float,
@@ -74,6 +80,7 @@ def _checkpoint(
     return {
         "model_state_dict": model.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
+        "scheduler_state_dict": scheduler.state_dict() if scheduler is not None else None,
         "epoch": epoch,
         "val_metrics": metrics,
         "best_val_mse": best_mse,
@@ -90,6 +97,8 @@ def main() -> None:
         raise ValueError("freeze_encoder_epochs and bev_every_epochs must be nonnegative.")
     if args.workers < 0 or args.prefetch_factor < 1:
         raise ValueError("workers must be nonnegative and prefetch_factor must be positive.")
+    if not 0 < args.lr_scheduler_factor < 1 or args.lr_scheduler_patience < 0 or args.min_lr <= 0:
+        raise ValueError("Scheduler factor, patience, and min_lr must be valid positive values.")
     if args.bev_every_epochs and not args.bev_dataroot:
         raise ValueError("bev_dataroot is required when BEV evaluation is enabled.")
     reproducibility = seed_everything(args.seed, args.deterministic)
@@ -164,11 +173,27 @@ def main() -> None:
         pretrained=not args.no_pretrained, hidden_size=args.hidden_size
     ).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    scheduler = (
+        torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer,
+            mode="min",
+            factor=args.lr_scheduler_factor,
+            patience=args.lr_scheduler_patience,
+            min_lr=args.min_lr,
+        )
+        if args.lr_scheduler == "plateau"
+        else None
+    )
     best_mse, start_epoch, history = float("inf"), 0, []
     if args.resume:
         checkpoint = torch.load(args.resume, map_location=device, weights_only=False)
         model.load_state_dict(checkpoint["model_state_dict"])
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        if scheduler is not None and checkpoint.get("scheduler_state_dict") is not None:
+            scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+        if args.resume_lr is not None:
+            for parameter_group in optimizer.param_groups:
+                parameter_group["lr"] = args.resume_lr
         best_mse = float(checkpoint.get("best_val_mse", float("inf")))
         start_epoch = int(checkpoint["epoch"])
         history = list(checkpoint.get("history", []))
@@ -186,12 +211,16 @@ def main() -> None:
             **{f"train_{key}": value for key, value in train_metrics.items()},
             **{f"val_{key}": value for key, value in val_metrics.items()},
         }
+        row["learning_rate"] = optimizer.param_groups[0]["lr"]
+        if scheduler is not None:
+            scheduler.step(val_metrics["mse"])
+        row["next_learning_rate"] = optimizer.param_groups[0]["lr"]
         if tracker:
             row["eta_hours"] = tracker.log_epoch(row, epoch, args.epochs).eta_seconds / 3600.0
         history.append(row)
         print(json.dumps(row))
         payload = _checkpoint(
-            model, optimizer, epoch, val_metrics, best_mse, history, args, run_manifest
+            model, optimizer, scheduler, epoch, val_metrics, best_mse, history, args, run_manifest
         )
         if val_metrics["mse"] < best_mse:
             best_mse = val_metrics["mse"]
