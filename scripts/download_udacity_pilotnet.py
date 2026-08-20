@@ -8,7 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-DATASET_HANDLE = "aslanahmedov/self-driving-carbehavioural-cloning"
+DATASET_HANDLE = "hsuchialun/carndbehavioralcloningp3"
 
 
 def parse_args() -> argparse.Namespace:
