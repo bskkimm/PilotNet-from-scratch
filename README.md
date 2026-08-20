@@ -44,9 +44,22 @@ Keep related frames in the same split to avoid route or temporal leakage.
 ### Udacity Behavioral Cloning
 
 NVIDIA did not release the original PilotNet training data. The public Udacity
-Behavioral Cloning dataset is a documented substitute, not the original dataset.
-After downloading and extracting it so `driving_log.csv` and `IMG/` share a
-directory, convert the headerless log into the CSV format above:
+Behavioral Cloning Kaggle mirror is a documented substitute, not the original dataset:
+
+```text
+https://www.kaggle.com/datasets/aslanahmedov/self-driving-carbehavioural-cloning
+```
+
+Install the optional downloader, then download the mirror to a directory you choose.
+KaggleHub may require signing in to Kaggle and accepting the mirror's license.
+
+```bash
+python3 -m pip install -e '.[udacity]'
+python3 scripts/download_udacity_pilotnet.py --output-dir ~/dataset/udacity
+```
+
+The helper preserves `driving_log.csv` and `IMG/` under that directory, then writes
+prepared CSVs to `~/dataset/udacity/pilotnet/`. To prepare an already-downloaded copy:
 
 ```bash
 python3 scripts/prepare_udacity_pilotnet.py \

@@ -17,6 +17,7 @@ dev = ["pytest>=8.0", "ruff>=0.9"]
 mlflow = ["mlflow>=2.0"]
 nuscenes = ["nuscenes-devkit>=1.1.11"]
 bev = ["imageio>=2.31", "matplotlib>=3.7"]
+udacity = ["kagglehub>=0.3"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
